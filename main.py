@@ -4,10 +4,10 @@ import requests
 import tempfile
 import replicate
 
-app = Flask(__name__)
+# Configurer l'API Replicate avec votre clé API
+replicate_client = replicate.Client(api_token=os.getenv("REPLICATE_API_TOKEN"))
 
-# Initialiser l'API Replicate avec votre clé API
-replicate_client = replicate.Client(api_token=os.environ.get('REPLICATE_API_TOKEN'))
+app = Flask(__name__)
 
 # Dictionnaire pour stocker les historiques de conversation
 sessions = {}
@@ -37,44 +37,35 @@ def handle_request():
             sessions[custom_id] = []  # Nouvelle session
         history = sessions[custom_id]
 
-        # Télécharger l'image depuis l'URL fournie
+        # Ajouter l'image à l'historique si elle est présente
         if image_url:
             image_path = download_image(image_url)
             if image_path:
-                # Traiter l'image via Replicate avec le modèle spécifié
+                # Exécution du modèle Replicate avec l'image et le prompt
                 output = replicate_client.run(
                     "justmalhar/meta-llama-3.2-11b-vision:d48ad671cbc5f6e0c848f455ac2ca7280953fe1cf4039a010968f1cb19b0936f",
-                    input={
-                        "image": image_url,
-                        "top_p": 0.95,
-                        "prompt": prompt,
-                        "temperature": 0.3
-                    }
+                    input={"image": image_url, "top_p": 0.95, "prompt": prompt, "temperature": 0.3}
                 )
-
-                # Ajouter l'entrée de l'utilisateur à l'historique
                 history.append({
                     "role": "user",
-                    "parts": [prompt, image_url],
+                    "parts": [image_url, prompt],
                 })
-
-                # Ajouter la réponse du modèle à l'historique
-                history.append({
-                    "role": "model",
-                    "parts": [output],
-                })
-
-                # Ajouter le titre à la réponse
-                titled_response = f"☂️🐈 AI IMAGE 🐈✅ {output}"
-
-                # Retourner la réponse du modèle avec le titre
-                return jsonify({'message': titled_response})
-
             else:
                 return jsonify({'message': 'Failed to download image'}), 500
-
         else:
-            return jsonify({'message': 'No image URL provided'}), 400
+            history.append({
+                "role": "user",
+                "parts": [prompt],
+            })
+
+        # Ajouter la réponse du modèle à l'historique
+        history.append({
+            "role": "model",
+            "parts": [output],
+        })
+
+        # Retourner la réponse du modèle avec un titre spécifique
+        return jsonify({'message': f'☂️🐈 AI IMAGE 🐈✅ {output}'})
 
     except Exception as e:
         print(f"Error processing request: {e}")
